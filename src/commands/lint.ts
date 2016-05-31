@@ -24,6 +24,14 @@ export class LintCommand implements Command {
 
   args = [
     {
+      name: 'input',
+      type: String,
+      alias: 'i',
+      defaultOption: true,
+      multiple: true,
+      description: 'Files and/or folders to lint. Exclusive. Defaults to cwd.'
+    },
+    {
       name: 'policy',
       type: String,
       alias: 'p',
@@ -48,21 +56,22 @@ export class LintCommand implements Command {
       )
     },
     {
-      name: 'no-recursion',
+      name: 'follow-dependencies',
       type: Boolean,
       description: (
-        'Only report errors on specified input files, not from their dependencies.'
+        'Follow through and lint dependencies. Defaults to true unless ' +
+        'an exclusive list of input files is provided.'
       )
     }
   ];
 
   run(options, config): Promise<any> {
-    if (config.inputs.length === 0) {
+    let lintFiles: string[] = options.input
+      || config.inputs.map((i) => i.substring(config.root.length));
+    if (lintFiles.length === 0) {
+      logger.warn('No inputs specified. Please use the --input, --entrypoint, ' +
+        '--shell or --fragment flags');
       let argsCli = commandLineArgs(this.args);
-
-      logger.warn('No inputs specified. Please use the --entrypoint, --shell ' +
-          'or --fragment flags');
-
       console.info(argsCli.getUsage({
         title: `polymer ${this.name}`,
         description: this.description,
@@ -70,15 +79,19 @@ export class LintCommand implements Command {
       return Promise.resolve();
     }
 
+    // If no flag is provided, default to true (or false if input is given)
+    let followDependencies = options['follow-dependencies'] || !options.input;
+
     return polylint.runWithOptions({
-      input: config.inputs.map((i) => i.substring(config.root.length)),
+      input: lintFiles,
       root: config.root,
       // TODO: read into config
       bowerdir: 'bower_components',
       policy: options.policy,
       'config-file': options['config-file'],
       'config-field': options['config-field'],
-      'no-recursion': options['no-recursion'],
+      // NOTE: `no-recursion` has the opposite behavior of `follow-dependencies`
+      'no-recursion': !followDependencies,
     }).then(() => null);
   }
 }
